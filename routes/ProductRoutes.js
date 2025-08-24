@@ -5,8 +5,13 @@ import { roleBaseAccess, verifyUserAuth } from '../middleware/userAuth.js';
 
 const router = express.Router();
 
-
-
+// Test route to check if API is working
+router.route("/test").get((req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Product API is working correctly!"
+  });
+});
 
 router.route("/products").get(getAllProducts)
 

@@ -21,8 +21,12 @@ class APIFunctionality{
 
     const removeField = ["keyword","page","limit"];
     removeField.forEach(key=>delete queryCopy[key]);
-   this.query = this.query.find(queryCopy)
-   return this;
+    
+    // Only apply filter if there are remaining query parameters
+    if (Object.keys(queryCopy).length > 0) {
+      this.query = this.query.find(queryCopy);
+    }
+    return this;
   }
   pagination(resultPerPage){
     const currentPage = Number(this.queryStr.page) || 1

@@ -38,19 +38,18 @@ const userSchema = new mongoose.Schema({
     default: "user"
   },
   resetPasswordToken: String,
-  resetPasswordExprire: Date
+  resetPasswordExpire: Date // ✅ Fixed typo
 }, { timestamps: true });
 
-// ✅ Hash password before save
+// Hash password before save
 userSchema.pre("save", async function(next) {
   if (!this.isModified("password")) {
     return next();
   }
-
   this.password = await bcryptjs.hash(this.password, 10);
 });
 
-// ✅ Generate JWT token
+// Generate JWT token
 userSchema.methods.getJWTToken = function () {
   return jwt.sign(
     { id: this._id },
@@ -59,8 +58,8 @@ userSchema.methods.getJWTToken = function () {
   );
 };
 
-// ✅ Generate Reset Token
-userSchema.methods.generatePasswordResetToken = function () {
+// Generate Reset Token
+userSchema.methods.getResetPasswordToken = function () {
   const resetToken = crypto.randomBytes(20).toString('hex');
 
   this.resetPasswordToken = crypto
@@ -68,11 +67,12 @@ userSchema.methods.generatePasswordResetToken = function () {
     .update(resetToken)
     .digest('hex');
 
-  this.resetPasswordExprire = Date.now() + 30 * 60 * 1000;
+  this.resetPasswordExpire = Date.now() + 30 * 60 * 1000; // ✅ Fixed typo
 
   return resetToken;
 };
 
+// Compare password
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcryptjs.compare(enteredPassword, this.password);
 };

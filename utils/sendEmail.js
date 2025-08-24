@@ -1,7 +1,7 @@
 import nodeMailer from 'nodemailer';
 
 export const sendEmail = async (options) => {
-  const transporter = nodeMailer.createTransport({ // ✅ Fixed typo: transpoter → transporter
+  const transporter = nodeMailer.createTransport({ 
     service: process.env.SMTP_SERVICE,
     auth: {
       user: process.env.SMTP_MAIL,
@@ -16,5 +16,5 @@ export const sendEmail = async (options) => {
     text: options.message
   };
 
-  await transporter.sendMail(mailOptions); // ✅ Fixed typo: transpoter → transporter
+  await transporter.sendMail(mailOptions); 
 };

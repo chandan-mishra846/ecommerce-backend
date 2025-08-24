@@ -38,13 +38,11 @@ export const getAllProducts = handleAsynError(async (req, res, next) => {
   apiFeatures.pagination(resultPerPage)
   const products = await apiFeatures.query; 
 
-  if(!products ||products.length===0){
-    return next(new HandleError("NO product found",404));
-  }
-
+  // Don't throw error if no products found, just return empty array
+  // This allows the frontend to handle empty state gracefully
   res.status(200).json({
     success: true,
-    products,
+    products: products || [],
     productCount,
     resultPerPage,
     totalPage,
