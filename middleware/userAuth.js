@@ -7,11 +7,13 @@ export const verifyUserAuth = handleAsynError(async (req, res, next) => {
   const { token } = req.cookies;
 
   if (!token) {
-    return next(new HandleError("Authantication is missing ,please login to use all the resource", 401));
+    return next(new HandleError("Authentication is missing, please login to use all resources", 401));
   }
 
   const decodeData = jwt.verify(token, process.env.JWT_SECRET_KEY);
   
+  // JWT ek token (string) hota hai jo server client ko deta hai jab user login/signup successfully karta hai.
+//Fir user har request ke saath is token ko bhejta hai taaki server uski identity verify kar sake.
 
   const user = await User.findById(decodeData.id);
   if (!user) {
