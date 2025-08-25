@@ -1,6 +1,8 @@
+// backend/routes/cartRoutes.js
+
 import express from 'express';
 import { verifyUserAuth } from '../middleware/userAuth.js';
-import { addToCart, getCart, updateCartItem, removeFromCart, clearCart } from '../controller/cartController.js';
+import { addToCart, getCart, updateCartItem, removeFromCart, clearCart } from '../controller/cartController.js'; // <-- clearCart yahan sahi se import ho raha hai
 
 const router = express.Router();
 
@@ -20,6 +22,6 @@ router.put('/update/:itemId', updateCartItem);
 router.delete('/remove/:itemId', removeFromCart);
 
 // Clear entire cart
-router.delete('/clear', clearCart);
+router.delete('/clear', clearCart); // <-- Aur yahan sahi se use bhi ho raha hai
 
 export default router;
