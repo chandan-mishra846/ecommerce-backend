@@ -17,35 +17,83 @@ export const getSellerProducts = handleAsynError(async (req, res, next) => {
 
 // Create new product (seller only)
 export const createSellerProduct = handleAsynError(async (req, res, next) => {
+  console.log('Create product request body:', req.body);
+  console.log('Create product files:', req.files ? Object.keys(req.files) : 'No files');
+
   let images = [];
 
-  if (typeof req.body.images === "string") {
-    images.push(req.body.images);
-  } else {
-    images = req.body.images;
+  // Handle images from request body (base64) or files
+  if (req.body.images) {
+    if (typeof req.body.images === "string") {
+      images.push(req.body.images);
+    } else {
+      images = req.body.images;
+    }
+  }
+
+  // If no images in body, check for file uploads
+  if (images.length === 0 && req.files) {
+    // Handle file uploads
+    const fileKeys = Object.keys(req.files).filter(key => key.startsWith('image'));
+    for (const key of fileKeys) {
+      const file = req.files[key];
+      images.push(file.tempFilePath);
+    }
+  }
+
+  if (images.length === 0) {
+    return next(new HandleError("At least one product image is required", 400));
   }
 
   const imagesLink = [];
 
   for (let i = 0; i < images.length; i++) {
-    const result = await cloudinary.uploader.upload(images[i], {
-      folder: "products",
-    });
+    try {
+      const result = await cloudinary.uploader.upload(images[i], {
+        folder: "products",
+      });
 
-    imagesLink.push({
-      public_id: result.public_id,
-      url: result.secure_url,
-    });
+      imagesLink.push({
+        public_id: result.public_id,
+        url: result.secure_url,
+      });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return next(new HandleError("Error uploading images", 400));
+    }
   }
 
-  req.body.image = imagesLink;
-  req.body.seller = req.user._id;
+  // Validate required fields
+  const { name, description, price, category, stock } = req.body;
+  
+  if (!name || !description || !price || !category || stock === undefined) {
+    return next(new HandleError("Please provide all required fields: name, description, price, category, stock", 400));
+  }
 
-  const product = await Product.create(req.body);
+  if (price <= 0) {
+    return next(new HandleError("Price must be greater than 0", 400));
+  }
+
+  if (stock < 0) {
+    return next(new HandleError("Stock cannot be negative", 400));
+  }
+
+  const productData = {
+    name: name.trim(),
+    description: description.trim(),
+    price: parseFloat(price),
+    category: category.trim(),
+    stock: parseInt(stock),
+    image: imagesLink,
+    seller: req.user._id,
+  };
+
+  const product = await Product.create(productData);
 
   res.status(201).json({
     success: true,
     product,
+    message: "Product created successfully"
   });
 });
 
@@ -243,6 +291,130 @@ export const getSellerStats = handleAsynError(async (req, res, next) => {
       totalRevenue,
       outOfStockProducts,
       pendingOrders: totalOrders - deliveredOrders
+    }
+  });
+});
+
+// Get out of stock products for seller
+export const getOutOfStockProducts = handleAsynError(async (req, res, next) => {
+  const outOfStockProducts = await Product.find({ 
+    seller: req.user._id,
+    stock: 0 
+  }).sort({ createdAt: -1 });
+
+  res.status(200).json({
+    success: true,
+    products: outOfStockProducts,
+    count: outOfStockProducts.length
+  });
+});
+
+// Restock product
+export const restockProduct = handleAsynError(async (req, res, next) => {
+  const { productId, quantity } = req.body;
+
+  const product = await Product.findOne({ 
+    _id: productId, 
+    seller: req.user._id 
+  });
+
+  if (!product) {
+    return next(new HandleError("Product not found", 404));
+  }
+
+  product.stock = parseInt(quantity);
+  await product.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Product restocked successfully",
+    product
+  });
+});
+
+// Get order history for seller
+export const getOrderHistory = handleAsynError(async (req, res, next) => {
+  const orders = await Order.find({
+    'orderItems.seller': req.user._id
+  })
+  .populate('user', 'name email')
+  .populate('orderItems.product', 'name')
+  .sort({ createdAt: -1 });
+
+  // Filter orders to only include items from this seller
+  const sellerOrders = orders.map(order => ({
+    ...order.toObject(),
+    orderItems: order.orderItems.filter(item => 
+      item.seller.toString() === req.user._id.toString()
+    )
+  })).filter(order => order.orderItems.length > 0);
+
+  res.status(200).json({
+    success: true,
+    orders: sellerOrders
+  });
+});
+
+// Get profit analytics for seller
+export const getProfitAnalytics = handleAsynError(async (req, res, next) => {
+  const { period = 'monthly' } = req.query;
+  
+  const orders = await Order.find({
+    'orderItems.seller': req.user._id,
+    orderStatus: 'delivered'
+  }).populate('orderItems.product', 'name');
+
+  let totalRevenue = 0;
+  let monthlyBreakdown = [];
+  let topProducts = [];
+
+  // Calculate total revenue
+  orders.forEach(order => {
+    order.orderItems.forEach(item => {
+      if (item.seller.toString() === req.user._id.toString()) {
+        totalRevenue += item.price * item.quantity;
+      }
+    });
+  });
+
+  // Group by products for top performers
+  const productSales = {};
+  orders.forEach(order => {
+    order.orderItems.forEach(item => {
+      if (item.seller.toString() === req.user._id.toString()) {
+        const productId = item.product._id.toString();
+        if (!productSales[productId]) {
+          productSales[productId] = {
+            _id: productId,
+            name: item.product.name,
+            totalSold: 0,
+            totalRevenue: 0
+          };
+        }
+        productSales[productId].totalSold += item.quantity;
+        productSales[productId].totalRevenue += item.price * item.quantity;
+      }
+    });
+  });
+
+  topProducts = Object.values(productSales)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .slice(0, 5);
+
+  const totalOrders = orders.length;
+  const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalRevenue,
+      totalOrders,
+      averageOrderValue,
+      monthlyBreakdown,
+      topProducts,
+      previousRevenue: totalRevenue * 0.8, // Mock data
+      previousOrders: totalOrders - 5,
+      previousAOV: averageOrderValue * 0.9
     }
   });
 });

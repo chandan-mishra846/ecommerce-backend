@@ -7,7 +7,11 @@ import {
   deleteSellerProduct, 
   getSellerOrders,
   getSellerStats,
-  updateSellerOrderStatus
+  updateSellerOrderStatus,
+  getOutOfStockProducts,
+  restockProduct,
+  getOrderHistory,
+  getProfitAnalytics
 } from '../controller/sellerController.js';
 
 const router = express.Router();
@@ -18,7 +22,9 @@ router.use(roleBaseAccess('seller', 'admin'));
 
 // Seller product routes
 router.route('/products')
-  .get(getSellerProducts)
+  .get(getSellerProducts);
+
+router.route('/product/new')
   .post(createSellerProduct);
 
 router.route('/products/:id')
@@ -31,5 +37,11 @@ router.route('/orders/:id/status').put(updateSellerOrderStatus);
 
 // Seller stats
 router.route('/stats').get(getSellerStats);
+
+// Additional seller routes
+router.route('/products/out-of-stock').get(getOutOfStockProducts);
+router.route('/products/restock').post(restockProduct);
+router.route('/orders/history').get(getOrderHistory);
+router.route('/profit').get(getProfitAnalytics);
 
 export default router;
