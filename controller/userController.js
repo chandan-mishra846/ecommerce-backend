@@ -9,7 +9,146 @@ import { v2 as cloudinary } from 'cloudinary';
 
 // 1. Register User
 export const registerUser = handleAsyncError(async (req, res, next) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
+
+  if (!req.files || !req.files.avatar) {
+    return next(new HandleError("Avatar image is required", 400));
+  }
+
+  const existingUser = await User.findOne({ email });
+  if (existingUser) return next(new HandleError("User with this email already exists", 409));
+
+  // Validate role - only allow user, seller, admin
+  const allowedRoles = ['user', 'seller', 'admin'];
+  const userRole = role && allowedRoles.includes(role) ? role : 'user';
+
+  const file = req.files.avatar;
+  const myCloud = await cloudinary.uploader.upload(file.tempFilePath, {
+    folder: 'avatars',
+    width: 150,
+    crop: 'scale',
+  });
+
+  // Prepare user data
+  const userData = {
+    name,
+    email,
+    password,
+    role: userRole,
+    avatar: { public_id: myCloud.public_id, url: myCloud.secure_url },
+  };
+
+  // If registering as seller, add seller-specific information
+  if (userRole === 'seller') {
+    const {
+      companyName,
+      businessType,
+      gstNumber,
+      panNumber,
+      street,
+      city,
+      state,
+      pincode,
+      country = 'India',
+      phone,
+      whatsapp,
+      website,
+      accountHolderName,
+      accountNumber,
+      bankName,
+      ifscCode,
+      branchName,
+      accountType = 'Savings'
+    } = req.body;
+
+    // Validate required seller fields
+    const requiredFields = [
+      'companyName', 'businessType', 'gstNumber', 'panNumber',
+      'street', 'city', 'state', 'pincode', 'phone',
+      'accountHolderName', 'accountNumber', 'bankName', 'ifscCode', 'branchName'
+    ];
+
+    for (const field of requiredFields) {
+      if (!req.body[field]) {
+        return next(new HandleError(`${field} is required for seller registration`, 400));
+      }
+    }
+
+    userData.sellerInfo = {
+      companyName,
+      businessType,
+      gstNumber,
+      panNumber,
+      address: {
+        street,
+        city,
+        state,
+        pincode,
+        country
+      },
+      contact: {
+        phone,
+        whatsapp,
+        website
+      },
+      bankDetails: {
+        accountHolderName,
+        accountNumber,
+        bankName,
+        ifscCode,
+        branchName,
+        accountType
+      },
+      documents: {},
+      isVerified: false,
+      verificationStatus: 'pending'
+    };
+
+    // Handle document uploads if provided
+    if (req.files.businessLicense) {
+      const businessLicenseUpload = await cloudinary.uploader.upload(req.files.businessLicense.tempFilePath, {
+        folder: 'seller-documents',
+      });
+      userData.sellerInfo.documents.businessLicense = {
+        public_id: businessLicenseUpload.public_id,
+        url: businessLicenseUpload.secure_url
+      };
+    }
+
+    if (req.files.gstCertificate) {
+      const gstCertificateUpload = await cloudinary.uploader.upload(req.files.gstCertificate.tempFilePath, {
+        folder: 'seller-documents',
+      });
+      userData.sellerInfo.documents.gstCertificate = {
+        public_id: gstCertificateUpload.public_id,
+        url: gstCertificateUpload.secure_url
+      };
+    }
+
+    if (req.files.panCard) {
+      const panCardUpload = await cloudinary.uploader.upload(req.files.panCard.tempFilePath, {
+        folder: 'seller-documents',
+      });
+      userData.sellerInfo.documents.panCard = {
+        public_id: panCardUpload.public_id,
+        url: panCardUpload.secure_url
+      };
+    }
+  }
+
+  const user = await User.create(userData);
+
+  sendToken(user, 201, res);
+});
+
+// Special Admin Registration (only for initial setup)
+export const registerAdmin = handleAsyncError(async (req, res, next) => {
+  const { name, email, password, adminSecretKey } = req.body;
+
+  // Verify admin secret key
+  if (adminSecretKey !== process.env.ADMIN_SECRET_KEY || adminSecretKey !== 'SUPER_ADMIN_KEY_2024') {
+    return next(new HandleError("Unauthorized: Invalid admin secret key", 403));
+  }
 
   if (!req.files || !req.files.avatar) {
     return next(new HandleError("Avatar image is required", 400));
@@ -29,6 +168,7 @@ export const registerUser = handleAsyncError(async (req, res, next) => {
     name,
     email,
     password,
+    role: 'admin',
     avatar: { public_id: myCloud.public_id, url: myCloud.secure_url },
   });
 
@@ -37,7 +177,7 @@ export const registerUser = handleAsyncError(async (req, res, next) => {
 
 // 2. Login User
 export const loginUser = handleAsyncError(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password, adminLogin } = req.body;
   if (!email || !password) return next(new HandleError("Email or Password cannot be empty", 400));
 
   const user = await User.findOne({ email }).select("+password");
@@ -45,6 +185,16 @@ export const loginUser = handleAsyncError(async (req, res, next) => {
 
   const isPasswordMatched = await user.comparePassword(password);
   if (!isPasswordMatched) return next(new HandleError("Invalid email or Password", 401));
+
+  // If admin login is attempted, verify user has admin role
+  if (adminLogin && user.role !== 'admin') {
+    return next(new HandleError("Unauthorized: Admin access denied", 403));
+  }
+
+  // If user is admin but not using admin login, deny access
+  if (user.role === 'admin' && !adminLogin) {
+    return next(new HandleError("Admin users must use admin login", 403));
+  }
 
   sendToken(user, 200, res);
 });

@@ -1,6 +1,6 @@
 import express from 'express';
 import { roleBaseAccess, verifyUserAuth } from '../middleware/userAuth.js';
-import { allMyOrder, createNewOrder, deleteOrder, getAllOrders, getSingleOrder, UpdateOrderStatus } from '../controller/orderCantroller.js';
+import { allMyOrder, createNewOrder, deleteOrder, getAllOrders, getSingleOrder, UpdateOrderStatus } from '../controller/orderController.js';
 
 
 const router = express.Router();

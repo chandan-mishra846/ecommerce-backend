@@ -5,7 +5,7 @@ import APIFunctionality from '../utils/apiFunctionality.js';
 
 // creating products
 export const createProducts = handleAsynError(async (req, res, next) => {
-  req.body.user = req.user.id;
+  req.body.seller = req.user.id;
   const product = await Product.create(req.body);
   res.status(201).json({
     success: true,

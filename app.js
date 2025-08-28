@@ -3,6 +3,7 @@ import product from './routes/ProductRoutes.js';
 import user from './routes/userRoutes.js';
 import order from './routes/orderRoutes.js';
 import cart from './routes/cartRoutes.js';
+import seller from './routes/sellerRoutes.js';
 import errorHandleMiddleWare from './middleware/error.js';
 import fileUpload from 'express-fileupload';
 import cookieParser from 'cookie-parser';
@@ -35,6 +36,7 @@ app.use("/api/v1", product);
 app.use("/api/v1", user);
 app.use("/api/v1", order);
 app.use("/api/v1/cart", cart);
+app.use("/api/v1/seller", seller);
 
 app.use(errorHandleMiddleWare);
 

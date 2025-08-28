@@ -7,6 +7,7 @@ import {
   loginUser,
   logout,
   registerUser,
+  registerAdmin,
   requestPasswordReset,
   resetPassword,
   updatePassword,
@@ -18,6 +19,7 @@ import { roleBaseAccess, verifyUserAuth } from '../middleware/userAuth.js';
 const router = express.Router();
 
 router.route("/register").post(registerUser);
+router.route("/register/admin").post(registerAdmin); // Special admin registration
 router.route("/login").post(loginUser);
 router.route("/logout").post(logout);
 

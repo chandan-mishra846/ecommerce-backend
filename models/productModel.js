@@ -66,9 +66,9 @@ const productSchema =new mongoose.Schema({
       }
     }
   ],
-  user:{
+  seller:{
    type:mongoose.Schema.ObjectId,
-   ref:"user",
+   ref:"User",
    required:true
   },
   createdAt:{

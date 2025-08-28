@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import app from './app.js';
 import { connectMongoDataBase } from './config/db.js';
 
-dotenv.config({ path: 'backend/config/config.env' });
+dotenv.config({ path: './config/config.env' });
 
 import { v2 as cloudinary } from 'cloudinary';
 connectMongoDataBase();
