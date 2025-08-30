@@ -169,6 +169,18 @@ export const getUserList = handleAsyncError(async (req, res, next) => {
   res.status(200).json({ success: true, users });
 });
 
+// Get users with role 'user' only
+export const getUsersOnly = handleAsyncError(async (req, res, next) => {
+  const users = await User.find({ role: 'user' });
+  res.status(200).json({ success: true, users });
+});
+
+// Get users with role 'seller' only  
+export const getSellersOnly = handleAsyncError(async (req, res, next) => {
+  const sellers = await User.find({ role: 'seller' });
+  res.status(200).json({ success: true, users: sellers });
+});
+
 export const getSingleUser = handleAsyncError(async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) return next(new HandleError("Invalid Mongo ID", 400));
   const user = await User.findById(req.params.id);

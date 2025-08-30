@@ -4,6 +4,8 @@ import {
   getSingleUser,
   getUserDetails,
   getUserList,
+  getUsersOnly,
+  getSellersOnly,
   loginUser,
   logout,
   registerUser,
@@ -31,6 +33,8 @@ router.route("/password/update").put(verifyUserAuth, updatePassword);
 router.route("/profile/update").put(verifyUserAuth, updateProfile);
 
 router.route("/admin/users").get(verifyUserAuth, roleBaseAccess("admin"), getUserList);
+router.route("/admin/users-only").get(verifyUserAuth, roleBaseAccess("admin"), getUsersOnly);
+router.route("/admin/sellers-only").get(verifyUserAuth, roleBaseAccess("admin"), getSellersOnly);
 router.route("/admin/user/:id")
   .get(verifyUserAuth, roleBaseAccess("admin"), getSingleUser)
   .put(verifyUserAuth, roleBaseAccess("admin"), updateUserRole)
