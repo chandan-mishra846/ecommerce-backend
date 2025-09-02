@@ -9,6 +9,20 @@ import handleAsynError from '../middleware/handleAsynError.js';
 
 export const createNewOrder = handleAsynError(async(req,res,next)=>{
     const{shippingInfo,orderItems,PaymentInfo,itemPric,taxPrice,shippingPrice,totalPrice} = req.body;
+    
+    // Check stock availability and reduce stock for each item
+    await Promise.all(orderItems.map(async (item) => {
+      const product = await Product.findById(item.product);
+      if (!product) {
+        return next(new HandleError(`Product not found: ${item.product}`, 404));
+      }
+      if (product.stock < item.quantity) {
+        return next(new HandleError(`Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`, 400));
+      }
+      // Reduce stock immediately when order is created
+      product.stock -= item.quantity;
+      await product.save({ validateBeforeSave: false });
+    }));
      
     const order = await Order.create({
       shippingInfo,

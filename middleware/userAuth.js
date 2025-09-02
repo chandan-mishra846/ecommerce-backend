@@ -4,7 +4,15 @@ import jwt from 'jsonwebtoken';
 import User from '../models/userModel.js';
 
 export const verifyUserAuth = handleAsynError(async (req, res, next) => {
-  const { token } = req.cookies;
+  let token = req.cookies.token;
+
+  // If no token in cookies, check Authorization header
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    }
+  }
 
   if (!token) {
     return next(new HandleError("Authentication is missing, please login to use all resources", 401));

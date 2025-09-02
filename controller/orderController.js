@@ -9,6 +9,20 @@ import handleAsynError from '../middleware/handleAsynError.js';
 
 export const createNewOrder = handleAsynError(async(req,res,next)=>{
     const{shippingInfo,orderItems,PaymentInfo,itemPric,taxPrice,shippingPrice,totalPrice} = req.body;
+    
+    // Check stock availability and reduce stock for each item
+    await Promise.all(orderItems.map(async (item) => {
+      const product = await Product.findById(item.product);
+      if (!product) {
+        return next(new HandleError(`Product not found: ${item.product}`, 404));
+      }
+      if (product.stock < item.quantity) {
+        return next(new HandleError(`Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`, 400));
+      }
+      // Reduce stock immediately when order is created
+      product.stock -= item.quantity;
+      await product.save({ validateBeforeSave: false });
+    }));
      
     const order = await Order.create({
       shippingInfo,
@@ -83,7 +97,7 @@ export const UpdateOrderStatus = handleAsynError(async(req,res,next)=>{
     if(order.orderStatus==="Delivered"){
       return next(new HandleError("This order has already been delivered",404));
     }
-    await Promise.all(order.orderItems.map(item=>updateQuantity(item.product,item.quantity)))
+    
     order.orderStatus = req.body.status;
     if(order.orderStatus==='Delivered'){
       order.deliveredAt = Date.now();
@@ -108,6 +122,15 @@ async function updateQuantity(id, quantity) {
   await product.save({ validateBeforeSave: false });
 }
 
+async function restoreStock(id, quantity) {
+  const product = await Product.findById(id);
+  if (!product) {
+    throw new HandleError("Product not found", 404); 
+  }
+  product.stock += quantity;
+  await product.save({ validateBeforeSave: false });
+}
+
 //Delete order
 
 export const deleteOrder = handleAsynError(async(req,res,next)=>{
@@ -115,15 +138,17 @@ export const deleteOrder = handleAsynError(async(req,res,next)=>{
     if(!order){
      return next(new HandleError("No order found",404));
     }
-    if(order.orderStatus!=='Delivered'){
-      return next(new HandleError("This order is under Processing and cannot be deleted",404));
+    
+    // Restore stock when order is cancelled/deleted
+    if(order.orderStatus !== 'Delivered') {
+      await Promise.all(order.orderItems.map(item => restoreStock(item.product, item.quantity)));
     }
 
     await Order.deleteOne({_id:req.params.id});
     
     res.status(200).json({
       success:true,
-      message:"Order deleted successfully"
+      message:"Order deleted successfully and stock restored"
     })
 
 })

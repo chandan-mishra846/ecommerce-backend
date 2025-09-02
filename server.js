@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 // Load environment variables
 dotenv.config({ path: './config/config.env' });
 
-// Explicitly connect to MongoDB with error handling
+// Explicitly connect to MongoDB with error handling  
 console.log('Connecting to MongoDB...');
 mongoose.connect(process.env.db_URI)
   .then((data) => {
