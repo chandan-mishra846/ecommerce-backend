@@ -334,87 +334,175 @@ export const restockProduct = handleAsynError(async (req, res, next) => {
 
 // Get order history for seller
 export const getOrderHistory = handleAsynError(async (req, res, next) => {
+  const sellerId = req.user._id;
+  
+  // Get seller's products first
+  const products = await Product.find({ seller: sellerId });
+  const productIds = products.map(product => product._id);
+
+  // Find orders containing seller's products
   const orders = await Order.find({
-    'orderItems.seller': req.user._id
+    'orderItems.product': { $in: productIds }
   })
   .populate('user', 'name email')
-  .populate('orderItems.product', 'name')
+  .populate('orderItems.product', 'name seller')
   .sort({ createdAt: -1 });
 
-  // Filter orders to only include items from this seller
-  const sellerOrders = orders.map(order => ({
-    ...order.toObject(),
-    orderItems: order.orderItems.filter(item => 
-      item.seller.toString() === req.user._id.toString()
-    )
-  })).filter(order => order.orderItems.length > 0);
+  // Filter orders to only include items from this seller and calculate seller-specific totals
+  const sellerOrders = orders.map(order => {
+    const sellerOrderItems = order.orderItems.filter(item => 
+      item.product && item.product.seller && 
+      item.product.seller.toString() === sellerId.toString()
+    );
+
+    if (sellerOrderItems.length > 0) {
+      // Calculate seller-specific totals
+      const sellerItemsTotal = sellerOrderItems.reduce((total, item) => 
+        total + (item.price * item.quantity), 0);
+      
+      return {
+        ...order.toObject(),
+        orderItems: sellerOrderItems,
+        // Keep original total for reference, but seller sees their portion
+        sellerTotal: sellerItemsTotal
+      };
+    }
+    return null;
+  }).filter(order => order !== null);
 
   res.status(200).json({
     success: true,
-    orders: sellerOrders
+    orders: sellerOrders,
+    count: sellerOrders.length
   });
 });
 
 // Get profit analytics for seller
 export const getProfitAnalytics = handleAsynError(async (req, res, next) => {
   const { period = 'monthly' } = req.query;
+  const sellerId = req.user._id;
   
+  // Get seller's products first
+  const products = await Product.find({ seller: sellerId });
+  const productIds = products.map(product => product._id);
+
+  // Find orders containing seller's products
   const orders = await Order.find({
-    'orderItems.seller': req.user._id,
+    'orderItems.product': { $in: productIds },
     orderStatus: 'delivered'
-  }).populate('orderItems.product', 'name');
+  }).populate('orderItems.product', 'name seller');
 
   let totalRevenue = 0;
+  let totalOrders = 0;
   let monthlyBreakdown = [];
-  let topProducts = [];
+  let topProducts = {};
 
-  // Calculate total revenue
+  // Calculate statistics from orders containing seller's products
   orders.forEach(order => {
-    order.orderItems.forEach(item => {
-      if (item.seller.toString() === req.user._id.toString()) {
-        totalRevenue += item.price * item.quantity;
-      }
-    });
-  });
+    let hasSellerItems = false;
+    let orderRevenue = 0;
 
-  // Group by products for top performers
-  const productSales = {};
-  orders.forEach(order => {
     order.orderItems.forEach(item => {
-      if (item.seller.toString() === req.user._id.toString()) {
+      if (item.product && item.product.seller && 
+          item.product.seller.toString() === sellerId.toString()) {
+        hasSellerItems = true;
+        const itemRevenue = item.price * item.quantity;
+        totalRevenue += itemRevenue;
+        orderRevenue += itemRevenue;
+
+        // Track top products
         const productId = item.product._id.toString();
-        if (!productSales[productId]) {
-          productSales[productId] = {
+        if (!topProducts[productId]) {
+          topProducts[productId] = {
             _id: productId,
             name: item.product.name,
             totalSold: 0,
             totalRevenue: 0
           };
         }
-        productSales[productId].totalSold += item.quantity;
-        productSales[productId].totalRevenue += item.price * item.quantity;
+        topProducts[productId].totalSold += item.quantity;
+        topProducts[productId].totalRevenue += itemRevenue;
       }
     });
+
+    if (hasSellerItems) {
+      totalOrders++;
+    }
   });
 
-  topProducts = Object.values(productSales)
+  // Generate monthly breakdown based on period
+  const now = new Date();
+  const monthlyData = {};
+
+  orders.forEach(order => {
+    let hasSellerItems = false;
+    let orderRevenue = 0;
+
+    order.orderItems.forEach(item => {
+      if (item.product && item.product.seller && 
+          item.product.seller.toString() === sellerId.toString()) {
+        hasSellerItems = true;
+        orderRevenue += item.price * item.quantity;
+      }
+    });
+
+    if (hasSellerItems) {
+      const orderDate = new Date(order.createdAt);
+      let periodKey;
+
+      switch (period) {
+        case 'daily':
+          periodKey = orderDate.toISOString().split('T')[0];
+          break;
+        case 'weekly':
+          const weekStart = new Date(orderDate);
+          weekStart.setDate(orderDate.getDate() - orderDate.getDay());
+          periodKey = weekStart.toISOString().split('T')[0];
+          break;
+        case 'monthly':
+          periodKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
+          break;
+        case 'yearly':
+          periodKey = orderDate.getFullYear().toString();
+          break;
+        default:
+          periodKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      if (!monthlyData[periodKey]) {
+        monthlyData[periodKey] = { period: periodKey, revenue: 0, orders: 0 };
+      }
+      monthlyData[periodKey].revenue += orderRevenue;
+      monthlyData[periodKey].orders += 1;
+    }
+  });
+
+  monthlyBreakdown = Object.values(monthlyData).sort((a, b) => a.period.localeCompare(b.period));
+
+  // Convert topProducts object to array and sort
+  const topProductsArray = Object.values(topProducts)
     .sort((a, b) => b.totalRevenue - a.totalRevenue)
     .slice(0, 5);
 
-  const totalOrders = orders.length;
   const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  // Calculate previous period data for comparison
+  const previousRevenue = totalRevenue * 0.85; // Mock previous data
+  const previousOrders = Math.max(0, totalOrders - 3);
+  const previousAOV = averageOrderValue * 0.9;
 
   res.status(200).json({
     success: true,
     data: {
-      totalRevenue,
+      totalRevenue: Math.round(totalRevenue),
       totalOrders,
-      averageOrderValue,
+      averageOrderValue: Math.round(averageOrderValue),
       monthlyBreakdown,
-      topProducts,
-      previousRevenue: totalRevenue * 0.8, // Mock data
-      previousOrders: totalOrders - 5,
-      previousAOV: averageOrderValue * 0.9
+      topProducts: topProductsArray,
+      previousRevenue: Math.round(previousRevenue),
+      previousOrders,
+      previousAOV: Math.round(previousAOV),
+      period
     }
   });
 });
