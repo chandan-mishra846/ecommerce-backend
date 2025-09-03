@@ -6,6 +6,7 @@ import cart from './routes/cartRoutes.js';
 import seller from './routes/sellerRoutes.js';
 import analytics from './routes/analyticsRoutes.js';
 import payment from './routes/paymentRoutes.js';
+// import contact from './routes/contactRoutes.js';
 import errorHandleMiddleWare from './middleware/error.js';
 import debugRoutes from './middleware/debugRoutes.js';
 import fileUpload from 'express-fileupload';
@@ -57,7 +58,7 @@ app.use("/api/v1/cart", cart);
 app.use("/api/v1/seller", seller);
 app.use("/api/v1/analytics", analytics);
 app.use("/api/v1/payment", payment);
-app.use("/api/v1/payment", payment);
+// app.use("/api/v1/contact", contact);
 
 app.use(errorHandleMiddleWare);
 

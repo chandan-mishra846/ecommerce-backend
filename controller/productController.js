@@ -38,6 +38,9 @@ export const getAllProducts = handleAsynError(async (req, res, next) => {
   apiFeatures.pagination(resultPerPage)
   const products = await apiFeatures.query; 
 
+  // Get all unique categories from all products (not just filtered ones)
+  const allCategories = await Product.distinct('category');
+
   // Don't throw error if no products found, just return empty array
   // This allows the frontend to handle empty state gracefully
   res.status(200).json({
@@ -46,7 +49,8 @@ export const getAllProducts = handleAsynError(async (req, res, next) => {
     productCount,
     resultPerPage,
     totalPage,
-    currentPage:page
+    currentPage:page,
+    allCategories
   });
 });
 
@@ -205,3 +209,88 @@ export const getAdminProducts = handleAsynError(async(req,res,next)=>{
     products
   })
 })
+
+//Admin - create product (exactly like seller)
+export const createAdminProduct = handleAsynError(async (req, res, next) => {
+  console.log('Admin create product request body:', req.body);
+  console.log('Admin create product files:', req.files ? Object.keys(req.files) : 'No files');
+
+  let images = [];
+
+  // Handle images from request body (base64) or files - exactly like seller
+  if (req.body.images) {
+    if (typeof req.body.images === "string") {
+      images.push(req.body.images);
+    } else {
+      images = req.body.images;
+    }
+  }
+
+  // If no images in body, check for file uploads
+  if (images.length === 0 && req.files) {
+    // Handle file uploads
+    const fileKeys = Object.keys(req.files).filter(key => key.startsWith('image'));
+    for (const key of fileKeys) {
+      const file = req.files[key];
+      images.push(file.tempFilePath);
+    }
+  }
+
+  if (images.length === 0) {
+    return next(new HandleError("At least one product image is required", 400));
+  }
+
+  const imagesLink = [];
+
+  // Import cloudinary at the top of the file if not already imported
+  const { v2: cloudinary } = await import('cloudinary');
+
+  for (let i = 0; i < images.length; i++) {
+    try {
+      const result = await cloudinary.uploader.upload(images[i], {
+        folder: "products",
+      });
+
+      imagesLink.push({
+        public_id: result.public_id,
+        url: result.secure_url,
+      });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return next(new HandleError("Error uploading images", 400));
+    }
+  }
+
+  // Validate required fields - exactly like seller
+  const { name, description, price, category, stock } = req.body;
+  
+  if (!name || !description || !price || !category || stock === undefined) {
+    return next(new HandleError("Please provide all required fields: name, description, price, category, stock", 400));
+  }
+
+  if (price <= 0) {
+    return next(new HandleError("Price must be greater than 0", 400));
+  }
+
+  if (stock < 0) {
+    return next(new HandleError("Stock cannot be negative", 400));
+  }
+
+  const productData = {
+    name: name.trim(),
+    description: description.trim(),
+    price: parseFloat(price),
+    category: category.trim(),
+    stock: parseInt(stock),
+    image: imagesLink,
+    seller: req.user._id, // Admin creates but still needs a seller reference
+  };
+
+  const product = await Product.create(productData);
+
+  res.status(201).json({
+    success: true,
+    product,
+    message: "Product created successfully by admin"
+  });
+});
