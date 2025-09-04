@@ -31,6 +31,11 @@ router.route('/products/:id')
   .put(updateSellerProduct)
   .delete(deleteSellerProduct);
 
+// Alternative route for single product operations
+router.route('/product/:id')
+  .put(updateSellerProduct)
+  .delete(deleteSellerProduct);
+
 // Seller order routes
 router.route('/orders').get(getSellerOrders);
 router.route('/orders/:id/status').put(updateSellerOrderStatus);
