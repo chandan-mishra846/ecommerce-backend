@@ -9,7 +9,7 @@ import { v2 as cloudinary } from 'cloudinary';
 
 // 1. Register User
 export const registerUser = handleAsyncError(async (req, res, next) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
 
   if (!req.files || !req.files.avatar) {
     return next(new HandleError("Avatar image is required", 400));
@@ -25,13 +25,46 @@ export const registerUser = handleAsyncError(async (req, res, next) => {
     crop: 'scale',
   });
 
-  const user = await User.create({
+  // Prepare user data
+  const userData = {
     name,
     email,
     password,
+    role: role || 'user', // Default to user if no role specified
     avatar: { public_id: myCloud.public_id, url: myCloud.secure_url },
-  });
+  };
 
+  // If registering as seller, add seller info
+  if (role === 'seller') {
+    userData.sellerInfo = {
+      companyName: req.body.companyName,
+      businessType: req.body.businessType,
+      gstNumber: req.body.gstNumber,
+      panNumber: req.body.panNumber,
+      address: {
+        street: req.body.street,
+        city: req.body.city,
+        state: req.body.state,
+        pincode: req.body.pincode,
+        country: req.body.country || 'India'
+      },
+      contact: {
+        phone: req.body.phone,
+        whatsapp: req.body.whatsapp,
+        website: req.body.website
+      },
+      bankDetails: {
+        accountHolderName: req.body.accountHolderName,
+        accountNumber: req.body.accountNumber,
+        bankName: req.body.bankName,
+        ifscCode: req.body.ifscCode,
+        branchName: req.body.branchName,
+        accountType: req.body.accountType || 'Savings'
+      }
+    };
+  }
+
+  const user = await User.create(userData);
   sendToken(user, 201, res);
 });
 
