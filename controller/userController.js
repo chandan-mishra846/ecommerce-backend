@@ -192,7 +192,15 @@ export const updateUserRole = handleAsyncError(async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) return next(new HandleError("Invalid Mongo ID", 400));
   const user = await User.findById(req.params.id);
   if (!user) return next(new HandleError("User not found", 404));
+  
+  // Update role
   user.role = req.body.role;
+  
+  // If seller info is provided, update it too
+  if (req.body.sellerInfo) {
+    user.sellerInfo = req.body.sellerInfo;
+  }
+  
   await user.save();
   res.status(200).json({ success: true, user });
 });
